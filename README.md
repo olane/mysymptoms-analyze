@@ -66,7 +66,13 @@ Curses!
 
 ### CSV
 
-The csv export sounds useful, but it sucks. It loses:
+The csv export sounds useful, but it sucks. Here's a snippet:
+
+```csv
+12/26/2017, 10:00, Symptom, Stomach cramping, Intensity: 3, Duration: 6:00
+12/26/2017, 10:55, Breakfast, "Porridge oats", "Cow's milk", "Chicken egg", "[ x 2 ]"
+```
+ It loses:
 - All nesting information about which items are ingredients of other items
 - Metadata such as which items have barcodes, are recipes, etc.
 - It smushes quantities into the list of items for an event - you just have to know that if it's in square brackets, it's a quantity for the previous item. Sometimes quantities are formatted like `[ 200 mg ]` and sometimes like `[ x 2 ]`
@@ -75,11 +81,33 @@ The csv export sounds useful, but it sucks. It loses:
 
 ### HTML
 
-The HTML export exports the whole diary as a huge set of tables with inline styles, with `<br/>`s and `&nbsp;`es everywhere. Since it looks identical to the PDF report I assume they're using a HTML -> PDF library to create the PDFs and this export was just easy to add in once they'd done that.
+The HTML export exports the whole diary as a huge set of tables with inline styles, with `<br/>`s and `&nbsp;`es everywhere. Since it looks identical to the PDF report I assume they're using a HTML -> PDF library to create the PDFs and this export was just easy to add in once they'd done that. 
 
-It does maintain more information than the CSV, although it does so at the cost of more difficult parsing. There's a table for each day, and two columns. The left column tells you the event type and the time (all smushed together with an image tag between them), and the right column is a `<br>` delimited list of stuff about the event. 
+It does maintain more information than the CSV, although it does so at the cost of more difficult parsing. There's a table for each day, and two columns. The left column tells you the event type and the time (all smushed together with an image tag between them), and the right column is a `<br>` delimited list of stuff about the event. Here's a snippet:
 
-For a food event, it will be a list of food items. If the food item has ingredients those are listed in brackets. If an ingredient has ingredients, you get nested brackets. There's no HTML tag structure here - just a plain string. If an item has brackets in its name, well, you better be able to work out that the contents of those brackets aren't ingredients. If an item has a comma, there's a similar but even harder to solve problem.
+```html
+<table id="mhs-diary" summary="mySymptoms Diary"><colgroup><col class="mhs-diary-first" /></colgroup>
+   <thead>
+      <tr>
+            <th scope="col">Tue 26 Dec 2017</th>
+            <th scope="col"></th>
+      </thead>
+       <tbody>
+      <tr bgcolor="fff5f5">
+      <td width = "33%">10:00&nbsp<img class="symptom" />&nbspSymptom</td>
+      <td width = "67%">Stomach cramping   (Intensity: 3 and Duration: 6 hrs 0 mins)</td>
+   </tr>
+   <tr bgcolor="ffffff">
+      <td width = "33%">10:55 <img class="ingested" /> Breakfast</td>
+      <td width = "67%">Porridge oats
+      <br>Cow's milk
+      <br>Chicken egg [ x 2 ]
+      <br></td>
+   </tr>
+   ...
+```
+
+For a food event, the right hand column will be a list of food items. If the food item has ingredients those are listed in brackets. If an ingredient has ingredients, you get nested brackets. There's no HTML tag structure here - just a plain string. If an item has brackets in its name, well, you better be able to work out that the contents of those brackets aren't ingredients. If an item has a comma, there's a similar but even harder to solve problem.
 
 I have an item like this:
 
@@ -110,7 +138,7 @@ So:
 - We still don't have all the metadata (recipes, barcodes etc.)
 - We _do_ have ingredient hierarchy information, but it's impossible to parse in a bulletproof manner because the item names aren't quoted
 - We have to traverse the HTML and filter out all the gubbins like break and image tags
-- We still have the problem with quantities but at least it's unambiguously hacky to extract them (unless you have square brackets in your item names, in which case I give up)
+- We still have the problem with quantities but at least it's unambiguously hacky to extract them (unless you have square brackets in your item names...)
 
 ### Combining the two
 
