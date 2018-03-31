@@ -141,7 +141,23 @@ WHERE parent."name" like '%Almond milk%';
 
 This works a bit better - we've lost the transitivity so we just get the direct children. One thing to note is that we've also lost the "Kind of" data here - presumably we'll need another query to get that if we want it.
 
-Annoyingly, we still get duplicates. It looks like all the entries in the `ingestedtoingested` table are duplicated, one entry with a user id and one entry without. In fact, there's also duplicates where the user column is identical, so even omitting null/non-null user ids won't work. This may be the underlying reason that `flattened` has lots of duplication in it.
+Annoyingly, we still get duplicates. It looks like many of the entries in the `ingestedtoingested` table are duplicated, one entry with a user id and one entry without. In fact, there's also duplicates where the user column is identical, so even omitting null/non-null user ids won't work. This may be the underlying reason that `flattened` has lots of duplication in it.
+
+To test how common this is, let's try this:
+
+```sql
+SELECT 
+    ingestedparentuuid, 
+    ingestedchilduuid,
+    count(*)
+FROM ingestedtoingested
+GROUP BY 
+    ingestedparentuuid,
+    ingestedchilduuid
+HAVING count(*) > 1;
+```
+
+255 results. All the results have count=2 except one with count=4, and there are 1467 total rows, so we have 1210 unique pairings in the table, and 257 duplicates.
 
 Amending the query to return distinct items gives us the correct results, but it's a bit annoying to have to use `SELECT DISTINCT`:
 
@@ -157,4 +173,7 @@ FROM main."ingested" as parent
  JOIN ingested as child ON child.uuid = ingestedtoingested.ingestedchilduuid
 WHERE parent."name" like '%Almond milk%';
 ```
+
+Let's test our skills by recreating the `ingredients` column and checking we match what the app data says:
+
 
