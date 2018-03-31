@@ -157,4 +157,4 @@ I did this, and got an email with an attachment called `mySymptoms.sgld`. I don'
 
 That guess is correct - changing the file extension to `.sqlite` and opening it up with Datum reveals a whole bunch of tables. Darren _did_ warn me that "The schema is relatively straight forward, but has been abused over the years due to evolution, compromises, and some bad decisions!" - and I can see what he means, there's a whole mishmash of stuff in here.
 
-Investigation continued in SQLITE-INVESTIGATION.md
+Investigation continued in `02_sqlite_investigation.md`
