@@ -1,3 +1,5 @@
-mySymptomsDiary.csv
+*.csv
 mySymptomsDiary.html
 mySymptomsDiary.pdf
+*.sgld
+*.sqlite

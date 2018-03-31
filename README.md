@@ -70,10 +70,11 @@ The csv export sounds useful, but it sucks. Here's a snippet:
 
 ```csv
 12/26/2017, 10:00, Symptom, Stomach cramping, Intensity: 3, Duration: 6:00
-12/26/2017, 10:55, Breakfast, "Porridge oats", "Cow's milk", "Chicken egg", "[ x 2 ]"
+12/26/2017, 10:55, Breakfast, "Porridge", "Porridge oats", "Cow's milk", "Chicken egg", "[ x 2 ]"
 ```
- It loses:
-- All nesting information about which items are ingredients of other items
+
+It loses:
+- All nesting information about which items are ingredients of other items (in that snippet, "Porridge oats" and "Cow's milk" are both ingredients of "Porridge")
 - Metadata such as which items have barcodes, are recipes, etc.
 - It smushes quantities into the list of items for an event - you just have to know that if it's in square brackets, it's a quantity for the previous item. Sometimes quantities are formatted like `[ 200 mg ]` and sometimes like `[ x 2 ]`
 - Symptom events (which might have multiple symptoms reported) again smush everything into a long list so for something like `Symptom, Nausea, Intensity: 1, Heartburn, Intensity: 1` you have to work out which intensity applies to which symptom.
@@ -99,13 +100,13 @@ It does maintain more information than the CSV, although it does so at the cost 
    </tr>
    <tr bgcolor="ffffff">
       <td width = "33%">10:55 <img class="ingested" /> Breakfast</td>
-      <td width = "67%">Porridge oats
-      <br>Cow's milk
+      <td width = "67%">Porridge (Porridge oats, Cow's milk)
       <br>Chicken egg [ x 2 ]
       <br></td>
    </tr>
    ...
 ```
+Note: the lack of `;` after `&nbsp` here is actually how it's rendered in the exported html, I'm surprised it works as intended.
 
 For a food event, the right hand column will be a list of food items. If the food item has ingredients those are listed in brackets. If an ingredient has ingredients, you get nested brackets. There's no HTML tag structure here - just a plain string. If an item has brackets in its name, well, you better be able to work out that the contents of those brackets aren't ingredients. If an item has a comma, there's a similar but even harder to solve problem.
 
@@ -147,3 +148,13 @@ So the CSV is easy to parse but missing most of the information. The HTML is alm
 Our problem with parsing the HTML strings was that the item names aren't quoted. However, in the CSV they _are_ - otherwise the CSV would probably end up malformed. When trying to parse a row from the HTML table, we can find the corresponding row in the CSV and get a list of the item names. We know the parser can't break apart those item names - they become tokens, and the parsing job becomes much simpler!
 
 At this point, it's dinner time and I'm way too tired to start writing a parser.
+
+## An escape hatch!
+
+I emailed the developers of the app (Skygazer Labs), and Darren very quickly got back to me with an easy fix for my problem. The app has the ability to send a bug report and attach your database to the report - but the report is just sent as an email with an attachment! You can just change the recipient email to be yourself rather than the developer.
+
+I did this, and got an email with an attachment called `mySymptoms.sgld`. I don't recognize that file extension (and a quick Google turns up nothing), but my hunch is that it stands for StarGazer Labs Data, and is just a way of slightly masking the fact it's actually a sqlite database.
+
+That guess is correct - changing the file extension to `.sqlite` and opening it up with Datum reveals a whole bunch of tables. Darren _did_ warn me that "The schema is relatively straight forward, but has been abused over the years due to evolution, compromises, and some bad decisions!" - and I can see what he means, there's a whole mishmash of stuff in here.
+
+Investigation continued in SQLITE-INVESTIGATION.md
