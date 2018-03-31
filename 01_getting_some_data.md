@@ -153,7 +153,7 @@ At this point, it's dinner time and I'm way too tired to start writing a parser.
 
 I emailed the developers of the app (Skygazer Labs), and Darren very quickly got back to me with an easy fix for my problem. The app has the ability to send a bug report and attach your database to the report - but the report is just sent as an email with an attachment! You can just change the recipient email to be yourself rather than the developer.
 
-I did this, and got an email with an attachment called `mySymptoms.sgld`. I don't recognize that file extension (and a quick Google turns up nothing), but my hunch is that it stands for StarGazer Labs Data, and is just a way of slightly masking the fact it's actually a sqlite database.
+I did this, and got an email with an attachment called `mySymptoms.sgld`. I don't recognize that file extension (and a quick Google turns up nothing), but my hunch is that it stands for SkyGazer Labs Data, and is just a way of slightly masking the fact it's actually a sqlite database.
 
 That guess is correct - changing the file extension to `.sqlite` and opening it up with Datum reveals a whole bunch of tables. Darren _did_ warn me that "The schema is relatively straight forward, but has been abused over the years due to evolution, compromises, and some bad decisions!" - and I can see what he means, there's a whole mishmash of stuff in here.
 
