@@ -1,4 +1,4 @@
-# Getting data out of the sqlite database
+# Investigating the sqlite database
 
 ## The tables
 
@@ -414,3 +414,33 @@ WITH name_tree AS (
 SELECT *
 FROM name_tree;
 ```
+
+Finally, let's grab _all_ the items and print all their base items' names:
+
+```sql
+WITH name_tree AS (
+   	SELECT uuid as originaluuid, uuid, baseitem, name
+   	FROM ingested
+   UNION
+   SELECT p.originaluuid, c.uuid, c.baseitem, c.name
+   FROM ingested c
+     JOIN name_tree p ON p.baseitem = c.uuid  -- this is the recursion
+),
+name_trees AS(
+	SELECT *
+	FROM name_tree
+	WHERE uuid <> originaluuid),
+distinct_ingested AS (
+	SELECT DISTINCT
+		name,
+		uuid
+	FROM ingested)
+SELECT
+	distinct_ingested.name,
+	group_concat(name_trees.name, ', ')
+FROM distinct_ingested
+	LEFT JOIN name_trees ON distinct_ingested.uuid = name_trees.originaluuid
+GROUP BY distinct_ingested.uuid, distinct_ingested.name;
+```
+
+I had to do a CTE to get non-duplicated ingested items here as a starting point for my main join. I've also tracked the original UUID of the item we're interested in in the recursive query, and I've also excluded that original item in the `name_trees` CTE so that we don't print the original item's name as one of its base items.
