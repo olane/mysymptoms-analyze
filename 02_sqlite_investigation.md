@@ -16,7 +16,8 @@ This is a funny one. It just stores two columns - `ingestedparend_uuid` and `ing
  - `isitem` is 0 if the item is a recipe and 1 if it isn't
  - `numberofingestedevents` counts how many times the item has been used
  - `usage` is a confusing one - it's an int that is usually 0 but sometimes in the thousands. Perhaps it's a measure of how many times that item is used over all the app's users, but that data isn't available for all items?
- - `barcode` and `creationdate` and `ingredientcount` and `isincloud` and `deleted` are fairly self explanatory
+ - `barcode` and `creationdate` and `ingredientcount` and `deleted` are fairly self explanatory
+ - `isincloud` _seems_ self-explanatory until you realise that some of its entries have numbers that are larger than 1. I haven't investigated what that means.
  - `clean` is always 0 - don't know what that is
  - `baseitem` looks like it stores the "Kind of" - it's either null, or it's a uuid that refers to another ingested row.
 
@@ -214,3 +215,122 @@ Interestingly, we pick up a few things that weren't prepopulated properly:
 | "Butter" | 5a81b60... | "null"          | "Salt, Cow's milk"   |
 
 I suspect this is the same bug that makes some ingredients lists show up as the string null rather than the value null.
+
+
+The list returned by our query _looks_ good, but how can we know it's right? Well, we can do some quick checks. For example, there should be the same number of items in our list and in the prepopulated list. It follows that there should be the same number of commas.
+
+Let's try counting the number of commas in each version, and returning only rows where the counts don't match:
+
+```sql
+WITH both_lists AS (SELECT
+	parent.name,
+	parent.uuid,
+	parent.ingredientnames,
+	group_concat(child.name, ', ') as our_ingredient_names
+FROM main."ingested" as parent
+ LEFT JOIN (SELECT DISTINCT ingestedparentuuid, ingestedchilduuid FROM ingestedtoingested) i2i ON i2i.ingestedparentuuid = parent.uuid
+ LEFT JOIN (SELECT DISTINCT uuid, name FROM ingested) child ON child.uuid = i2i.ingestedchilduuid
+GROUP BY parent.uuid, parent.name, parent.ingredientnames)
+
+SELECT 
+*,
+coalesce(length(ingredientnames) - length(REPLACE(ingredientnames, ',', '')), 0) AS commas_in_prepopulated,
+coalesce(length(our_ingredient_names) - length(REPLACE(our_ingredient_names, ',', '')), 0) AS commas_in_ours
+FROM both_lists
+WHERE commas_in_prepopulated != commas_in_ours;
+```
+
+Some notes: there's no easy way to count the instances of a character, as far as I can tell, so I compared the length of the string with the length of the string after removing all the commas. Secondly, because nulls propagate through this calculation, and `NULL != x` for all `x`, if we have a null on either side nothing will show up (another reason to avoid nulls in SQL where possible!).
+
+This query should return 0 rows, ideally. It actually returns... 52 rows :(
+
+Hang on, we've already said that some of the prepopulated rows are `"null"` when they shouldn't be. Let's exclude those:
+
+```sql
+WITH both_lists AS (SELECT
+	parent.name,
+	parent.uuid,
+	parent.ingredientnames,
+	group_concat(child.name, ', ') as our_ingredient_names
+FROM main."ingested" as parent
+ LEFT JOIN (SELECT DISTINCT ingestedparentuuid, ingestedchilduuid FROM ingestedtoingested) i2i ON i2i.ingestedparentuuid = parent.uuid
+ LEFT JOIN (SELECT DISTINCT uuid, name FROM ingested) child ON child.uuid = i2i.ingestedchilduuid
+GROUP BY parent.uuid, parent.name, parent.ingredientnames)
+
+SELECT 
+*,
+coalesce(length(ingredientnames) - length(REPLACE(ingredientnames, ',', '')), 0) AS commas_in_prepopulated,
+coalesce(length(our_ingredient_names) - length(REPLACE(our_ingredient_names, ',', '')), 0) AS commas_in_ours
+FROM both_lists
+WHERE commas_in_prepopulated != commas_in_ours AND ingredientnames != "null";
+```
+
+...still 19 rows. In all cases bar one, there's list of ingredients in the prepopulated list, and on our side we have `NULL`.
+
+In _one_ case, we have this:
+
+name|uuid|ingredientnames|our_ingredient_names|commas_in_prepopulated|commas_in_ours
+-|-|-|-|-|-
+Chocolate and rice crispy cake	|A7D4A2DB...|	Chocolate, Rice Krispies|	Rice krispies, Rice Krispies, Chocolate|	1	|2
+
+On a little investigation it turns out that there are _two_ entries in the `ingested` table for Rice krispies (with the two capitalizations seen here), but they have the _same_ uuid. Looks like the duplicates bug we found earlier on is case insensitive, and because `SELECT DISTINCT` _isn't_ this one's slipping through. We can make the `SELECT DISTINCT` case insensitive with the addition of `COLLATE NOCASE` like so:
+
+```sql
+WITH both_lists AS (SELECT
+	parent.name,
+	parent.uuid,
+	parent.ingredientnames,
+	group_concat(child.name, ', ') as our_ingredient_names
+FROM main."ingested" as parent
+ LEFT JOIN (SELECT DISTINCT ingestedparentuuid, ingestedchilduuid FROM ingestedtoingested) i2i ON i2i.ingestedparentuuid = parent.uuid
+ LEFT JOIN (SELECT DISTINCT uuid, name COLLATE NOCASE FROM ingested) child ON child.uuid = i2i.ingestedchilduuid
+GROUP BY parent.uuid, parent.name, parent.ingredientnames)
+
+SELECT 
+*,
+coalesce(length(ingredientnames) - length(REPLACE(ingredientnames, ',', '')), 0) AS commas_in_prepopulated,
+coalesce(length(our_ingredient_names) - length(REPLACE(our_ingredient_names, ',', '')), 0) AS commas_in_ours
+FROM both_lists
+WHERE commas_in_prepopulated != commas_in_ours AND ingredientnames != "null";
+```
+
+I was stumped for a while on the ones where our query generates `NULL`. Those parent items have _no_ corresponding entries in the `ingestedtoingested` table. If I load up one of the items in the app, it shows all the ingredients just fine (and lets me click on them to view details), so the relationship must exist _somewhere_. 
+
+I added _all_ of the parent properties to the query so I could see if they all had anything in common. Bingo! They were all deleted (in fact, I suspect they were all _edited_ by deleting and creating new copies, because they all still exist in my app, although some are slightly different). Whatever deleted them must have also deleted the rows in the `ingestedtoingested` table - so we can add that to the long list of inconsistencies in this database (why have a delete flag in one table but actually delete the related data in another table?!)
+
+Excluding those deleted rows finally gives us the 0 rows we were hoping for:
+
+```sql
+WITH both_lists AS (SELECT
+	parent.name,
+	parent.uuid,
+	parent.ingredientnames,
+	group_concat(child.name, ', ') as our_ingredient_names
+FROM main."ingested" as parent
+ LEFT JOIN (SELECT DISTINCT ingestedparentuuid, ingestedchilduuid FROM ingestedtoingested) i2i ON i2i.ingestedparentuuid = parent.uuid
+ LEFT JOIN (SELECT DISTINCT uuid, name COLLATE NOCASE FROM ingested) child ON child.uuid = i2i.ingestedchilduuid
+GROUP BY parent.uuid, parent.name, parent.ingredientnames
+HAVING deleted = 0)
+
+SELECT 
+*,
+coalesce(length(ingredientnames) - length(REPLACE(ingredientnames, ',', '')), 0) AS commas_in_prepopulated,
+coalesce(length(our_ingredient_names) - length(REPLACE(our_ingredient_names, ',', '')), 0) AS commas_in_ours
+FROM both_lists
+WHERE commas_in_prepopulated != commas_in_ours AND ingredientnames != "null";
+```
+
+And finally, here's our fixed up query for building the correct ingredients lists:
+
+```sql
+SELECT
+	parent.name,
+	parent.uuid,
+	parent.ingredientnames,
+	group_concat(child.name, ', ') as our_ingredient_names
+FROM main."ingested" as parent
+ LEFT JOIN (SELECT DISTINCT ingestedparentuuid, ingestedchilduuid FROM ingestedtoingested) i2i ON i2i.ingestedparentuuid = parent.uuid
+ LEFT JOIN (SELECT DISTINCT uuid, name COLLATE NOCASE FROM ingested) child ON child.uuid = i2i.ingestedchilduuid
+GROUP BY parent.uuid, parent.name, parent.ingredientnames
+HAVING deleted = 0;
+```
