@@ -46,4 +46,8 @@ I think this option is the only real option.
 
 ## Let's get scrubbing
 
+First step: 
+```console
+$ cp mySymptoms.sqlite mySymptoms_scrubbed.sqlite
+```
 
