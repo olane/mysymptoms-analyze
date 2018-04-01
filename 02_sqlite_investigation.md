@@ -205,7 +205,7 @@ GROUP BY parent.uuid, parent.name, parent.ingredientnames;
 ```
 
 Note I had to do a `SELECT DISTINCT` on _both_ joins here because of the duplicates, which I thought would make the query slow but sqlite is Very Good so it only takes about half a second. 
-This gives us _almost_ the right thing. The ingredients actually appear in a different order in the prepopulated ingredients list than the list we've made. I'm sure there's a reason but ~~I don't care enough to work it out~~ that's left as an exercise to the reader.
+This gives us _almost_ the right thing. The ingredients actually appear in a different order in the prepopulated ingredients list than the list we've made. Presumably the prepopulated list is generated when saving an item and depends on the order the items were entered, whereas our version depends on the order they're returned from the database (and so, probably, but not guaranteed to be, the order they were added to the database).
 
 Interestingly, we pick up a few things that weren't prepopulated properly:
 
@@ -213,3 +213,4 @@ Interestingly, we pick up a few things that weren't prepopulated properly:
 |----------|------------|-----------------|----------------------|
 | "Butter" | 5a81b60... | "null"          | "Salt, Cow's milk"   |
 
+I suspect this is the same bug that makes some ingredients lists show up as the string null rather than the value null.
