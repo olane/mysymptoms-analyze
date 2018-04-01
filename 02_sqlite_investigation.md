@@ -395,11 +395,11 @@ ed7f5a7e...|	217bc2d0...|	Ham
 358719df...|	`<null>`   |    Swine
 358719df...|	`<null>`   |    Swine
 
-What happened? The duplicates strike again! Because each of these items appears twice in `ingested` (with the same uuid each time), we start off with _two_ Ham items. When we recurse, each of these finds _two_ Pork base items, and so on - so we get an exponential number of duplicates with each level of recursion. Sad!
+What happened? The duplicates strike again! Because each of these items appears _twice_ in `ingested` (with the same `uuid` each time), we start off with _two_ Ham items. When we recurse, each of these finds _two_ Pork base items, and so on - so we get an exponential number of duplicates with each level of recursion. Sad!
 
 At this point, I'm pretty sure we're going to have to molest this database to make it more usable, and the first thing I'm going to do is condense all those duplicates.
 
-For now, though, let's fix this query quickly by using `UNION` rather than `UNION ALL` (the former of which only includes distinct values).
+For now, though, let's fix this query quickly by using `UNION` rather than `UNION ALL` (the former of which only includes distinct values):
 
 ```sql
 WITH name_tree AS (
