@@ -334,3 +334,83 @@ FROM main."ingested" as parent
 GROUP BY parent.uuid, parent.name, parent.ingredientnames
 HAVING deleted = 0;
 ```
+
+### What about the "Kind of" relationships?
+
+In my initial investigation, I came across the `ingested.baseitem` field, which looked like it contained this info.
+
+It's query time!
+
+```sql
+SELECT 
+	item.name,
+	base.name
+FROM ingested as item
+	 JOIN ingested as base ON item.baseitem = base.uuid
+```
+
+This looks pretty good already! It was much easier because
+
+- It's a many to one relationship, not many to many, so you can do it with a single join
+- There's no duplication of the pairings, because there can't be in a many to one relationship (each item can only be related to a single base item, because it only has one field in which to reference it)
+
+Unfortunately it's harder to double check it because we don't have a prepopulated list to check against. On the other hand, it's so simple I'm pretty confident in it anyway, and a visual inspection shows only sensible values. If we _really_ wanted to we could combine it with our previous unfinished query for getting the ingredients list using `flattened` to check it (or indeed the CSV export function). Again, that's left as an exercise for the reader, unless it turns out I have to do it myself later.
+
+This section's a bit short, so let's crank the difficulty: what if we want the whole tree of "kind of"s? Ham is a kind of Pork, but Pork is a kind of Swine (at least in this database it is), so Ham is a kind of Swine, too.
+
+This, as far as I know, is only possible in SQLite 3.8.3 and later because it requires a recursive query. 3.8.3 added CTEs which are great and can be used for exactly this purpose.
+
+[This SO answer](https://stackoverflow.com/a/16749473) provided the basis for this query:
+
+```sql
+WITH name_tree AS (
+   	SELECT uuid, baseitem, name
+   	FROM ingested
+	WHERE uuid = 'ed7f5a7e-567e-429b-ab5b-f65e714fcc6f' -- start the recursion with our "Ham" item
+   UNION ALL
+   SELECT c.uuid, c.baseitem, c.name
+   FROM ingested c
+     JOIN name_tree p ON p.baseitem = c.uuid  -- this is the recursion
+) 
+SELECT *
+FROM name_tree;
+```
+
+This works... sort of:
+
+uuid|baseitem|name
+-|-|-
+ed7f5a7e...|	217bc2d0...|	Ham
+ed7f5a7e...|	217bc2d0...|	Ham
+217bc2d0...|	358719df...|	Pork
+217bc2d0...|	358719df...|	Pork
+217bc2d0...|	358719df...|	Pork
+217bc2d0...|	358719df...|	Pork
+358719df...|	`<null>`   |    Swine
+358719df...|	`<null>`   |    Swine
+358719df...|	`<null>`   |    Swine
+358719df...|	`<null>`   |    Swine
+358719df...|	`<null>`   |    Swine
+358719df...|	`<null>`   |    Swine
+358719df...|	`<null>`   |    Swine
+358719df...|	`<null>`   |    Swine
+
+What happened? The duplicates strike again! Because each of these items appears twice in `ingested` (with the same uuid each time), we start off with _two_ Ham items. When we recurse, each of these finds _two_ Pork base items, and so on - so we get an exponential number of duplicates with each level of recursion. Sad!
+
+At this point, I'm pretty sure we're going to have to molest this database to make it more usable, and the first thing I'm going to do is condense all those duplicates.
+
+For now, though, let's fix this query quickly by using `UNION` rather than `UNION ALL` (the former of which only includes distinct values).
+
+```sql
+WITH name_tree AS (
+   	SELECT uuid, baseitem, name
+   	FROM ingested
+	WHERE uuid = 'ed7f5a7e-567e-429b-ab5b-f65e714fcc6f' -- start the recursion with our "Ham" item
+   UNION
+   SELECT c.uuid, c.baseitem, c.name
+   FROM ingested c
+     JOIN name_tree p ON p.baseitem = c.uuid  -- this is the recursion
+) 
+SELECT *
+FROM name_tree;
+```
