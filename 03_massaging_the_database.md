@@ -51,3 +51,93 @@ First step:
 $ cp mySymptoms.sqlite mySymptoms_scrubbed.sqlite
 ```
 
+### Get rid of anything that's deleted
+
+```sql
+DELETE
+FROM ingested
+WHERE deleted != 0;
+
+DELETE
+FROM reactionevent
+WHERE deleted != 0;
+```
+
+### Get rid of duplicates (as much as possible)
+
+We really need to deal with all the entries in `ingested` that have the same uuid.
+
+```sql
+DELETE FROM ingested WHERE _id NOT IN (
+	SELECT
+		min(_id)
+	FROM ingested
+	GROUP BY uuid
+);
+```
+
+This deletes all but the first row in the table matching a particular uuid, taking advantage of the fact that there _is_ a unique `_id` field on the table which we can use to differentiate the otherwise identical rows.
+
+Before writing this I verified that all rows in the database with the same uuid are also the same in all the other rows that matter (although one pair varies by casing on `name`).
+
+The same thing needs to happen on the `ingestedtoingested` table:
+
+```sql
+DELETE FROM ingestedtoingested WHERE _id NOT IN (
+	SELECT 
+	min(_id)
+	FROM ingestedtoingested
+	GROUP BY 
+	    ingestedparentuuid,
+	    ingestedchilduuid
+);
+```
+
+### Get rid of any items not referenced
+
+```sql
+
+DELETE
+FROM ingested 
+WHERE uuid NOT IN 
+	(SELECT ingestedchilduuid FROM ingestedtoingested WHERE ingestedchilduuid IS NOT NULL)
+AND uuid NOT IN
+	(SELECT baseitem FROM ingested WHERE baseitem IS NOT NULL)
+AND uuid NOT IN
+	(SELECT ingesteduuid FROM ingestedtoingestedtype WHERE ingesteduuid IS NOT NULL)
+AND uuid NOT IN
+	(SELECT ingesteduuid FROM ingesteddetail)
+AND numberofingestedevents = 0
+AND frequency = 0;
+
+DELETE 
+FROM ingestedtoingested
+WHERE ingestedparentuuid NOT IN (SELECT uuid FROM ingested)
+OR ingestedchilduuid NOT IN (SELECT uuid FROM ingested);
+```
+
+If you run this mutiple times, it keeps deleting things! That's actually expected - as we delete items, we get rid of references to other items, so more items can be pruned. When we put this into a script, I'll run it in a loop until it doesn't delete any rows. In the case of my database, after about 6 runs the row counts stop changing.
+
+After this, I've only got 770 items in my `ingested` table, down from about 3.5k.
+
+
+### Get rid of any reactions that belong to reaction events that don't exist
+
+Because the reaction events table is more sensible and appears to have all its foreign keys intact, this isn't actually necessary.
+```sql
+DELETE FROM reaction 
+WHERE reactionevent_id NOT IN (SELECT _id FROM reactionevent);
+```
+
+### Let's just double check we haven't deleted any items that are referenced by an event
+
+```sql
+SELECT * 
+FROM ingesteddetail
+WHERE ingesteduuid NOT IN (SELECT uuid from ingested)
+AND ingesteduuid != -1;
+
+-- 0 rows returned
+```
+
+Batshit database structure reminder: `ingesteddetail` links `ingestedevent` to `ingested`, but it also attaches intensity and duration data to `ingestedevent` in which case its `ingesteduuid` is set to `-1`.
