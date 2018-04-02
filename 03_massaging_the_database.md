@@ -127,6 +127,7 @@ Because the reaction events table is more sensible and appears to have all its f
 ```sql
 DELETE FROM reaction 
 WHERE reactionevent_id NOT IN (SELECT _id FROM reactionevent);
+
 -- 0 rows deleted
 ```
 
