@@ -5,9 +5,8 @@ def getNamesToIds(connection):
     c = connection.cursor()
     c.execute('''   SELECT 
                         name,
-                        group_concat(uuid)
+                        uuid
                     FROM ingested
-                        GROUP BY name
                 ''')
     allRows = c.fetchall()
 
