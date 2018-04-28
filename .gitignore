@@ -3,3 +3,4 @@ mySymptomsDiary.html
 mySymptomsDiary.pdf
 *.sgld
 *.sqlite
+.vscode
