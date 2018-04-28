@@ -16,9 +16,22 @@ def getNamesToIds(connection):
     idsToNames = {key: [thing[1] for thing in group] for key, group in groupedByName}
     return idsToNames
 
+def deduplicateItems(connection, namesToIds):
+    for name, ids in namesToIds.items():
+        if len(ids) > 1:
+            print 'MERGING ' + str(len(ids)) + ' INSTANCES OF ' + name + ' INTO ' + ids[0]
+            mergeIngested(ids[0], ids[1:], connection)
+
+def mergeIngested(id, idsToMergeIn, connection):
+    c = connection.cursor()
+    c.execute('''
+        
+    ''')
+    connection.commit()
+
 conn = sqlite3.connect('mySymptoms_deduplicated.sqlite')
+
 namesToIds = getNamesToIds(conn)
-for name, ids in namesToIds.iteritems():
-    print name
-    print ', '.join(ids)
+deduplicateItems(conn, namesToIds)
+
 conn.close()
